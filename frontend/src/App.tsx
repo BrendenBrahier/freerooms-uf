@@ -23,7 +23,7 @@ const App = () => {
         if (isMounted) {
           setData({
             as_of: payload.as_of ?? null,
-            rooms: Array.isArray(payload.rooms) ? payload.rooms : []
+            rooms: Array.isArray(payload.rooms) ? payload.rooms : [],
           });
         }
       } catch (error) {
@@ -68,7 +68,12 @@ const App = () => {
             placeholder="Search building or room…"
             value={query}
             onChange={handleQueryChange}
-            style={{ flex: 1, padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+            style={{
+              flex: 1,
+              padding: 8,
+              borderRadius: 8,
+              border: "1px solid #ddd",
+            }}
             aria-label="Search"
           />
           <input
@@ -76,28 +81,44 @@ const App = () => {
             min={1}
             value={minCapacity}
             onChange={handleMinCapacityChange}
-            style={{ width: 120, padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+            style={{
+              width: 120,
+              padding: 8,
+              borderRadius: 8,
+              border: "1px solid #ddd",
+            }}
             aria-label="Minimum capacity"
             title="Minimum seats"
           />
         </div>
 
         {filteredRooms.map((room) => {
-          const badgeClass = room.closes_in_minutes <= 30 ? "badge yellow" : "badge green";
+          const badgeClass =
+            room.closes_in_minutes <= 30 ? "badge yellow" : "badge green";
           const until = new Date(room.open_until).toLocaleTimeString([], {
             hour: "numeric",
-            minute: "2-digit"
+            minute: "2-digit",
           });
           return (
             <div key={room.room_id} className="room-card">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
                 <strong>
                   {room.building_name} • {room.room_number}
                 </strong>
                 <span className={badgeClass}>Open until {until}</span>
               </div>
-              <div style={{ fontSize: 13, color: "#555", marginTop: 6 }}>{room.reason}</div>
-              <div style={{ display: "flex", gap: 8, marginTop: 8, fontSize: 13 }}>
+              <div style={{ fontSize: 13, color: "#555", marginTop: 6 }}>
+                {room.reason}
+              </div>
+              <div
+                style={{ display: "flex", gap: 8, marginTop: 8, fontSize: 13 }}
+              >
                 <span>Capacity: {room.capacity}</span>
                 <span>•</span>
                 <span>{room.amenities.join(", ")}</span>

@@ -12,9 +12,10 @@ if (iconPrototype._getIconUrl) {
 }
 
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconRetinaUrl:
+    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png"
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
 interface MapViewProps {
@@ -26,7 +27,11 @@ const MapView = ({ rooms }: MapViewProps) => {
 
   return (
     <div id="map">
-      <MapContainer center={center} zoom={15} style={{ height: "100%", width: "100%" }}>
+      <MapContainer
+        center={center}
+        zoom={15}
+        style={{ height: "100%", width: "100%" }}
+      >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -41,9 +46,10 @@ const MapView = ({ rooms }: MapViewProps) => {
                 <br />
                 Capacity: {room.capacity}
                 <br />
-                Open until: {new Date(room.open_until).toLocaleTimeString([], {
+                Open until:{" "}
+                {new Date(room.open_until).toLocaleTimeString([], {
                   hour: "numeric",
-                  minute: "2-digit"
+                  minute: "2-digit",
                 })}
                 <br />
                 {room.reason}
