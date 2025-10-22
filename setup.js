@@ -5,26 +5,11 @@ const fs = require("fs");
 const path = require("path");
 
 const repoRoot = __dirname;
-const candidateRoots = [
-  path.join(repoRoot, "freerooms-uf-starter"),
-  repoRoot,
-];
 
-function findProjectRoot() {
-  for (const candidate of candidateRoots) {
-    const hasBackend = fs.existsSync(path.join(candidate, "backend"));
-    const hasFrontend = fs.existsSync(path.join(candidate, "frontend"));
-    if (hasBackend && hasFrontend) {
-      return candidate;
-    }
-  }
-  return null;
-}
-
-const projectRoot = findProjectRoot();
+const projectRoot = repoRoot;
 if (!projectRoot) {
   console.error("[error] Unable to locate backend/frontend directories.");
-  console.error("        Expected to find them in this folder or in ./freerooms-uf-starter.");
+  console.error("        Expected to find them in this folder.");
   process.exit(1);
 }
 
