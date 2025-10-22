@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent } from "react";
 import MapView from "./components/MapView";
-import type { Room, RoomsResponse } from "./types";
+import type { Room, RoomsResponse } from "./types.ts";
 
 const DEFAULT_STATE: RoomsResponse = { rooms: [], as_of: null };
 
@@ -41,8 +41,8 @@ const App = () => {
   const filteredRooms: Room[] = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return data.rooms
-      .filter((room) => room.capacity >= minCapacity)
-      .filter((room) => {
+      .filter((room: Room) => room.capacity >= minCapacity)
+      .filter((room: Room) => {
         if (!normalizedQuery) return true;
         return (
           room.building_name.toLowerCase().includes(normalizedQuery) ||
