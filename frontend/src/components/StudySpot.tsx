@@ -16,13 +16,13 @@ const StudySpot: React.FC<StudySpotProps> = ({ room }) => {
   });
 
   return (
-    <li className="rounded-xl border border-slate-200 p-4 shadow-sm transition hover:border-slate-300 hover:shadow-md">
+    <li className="rounded-xl border border-slate-200 p-4 shadow-md transition hover:border-slate-300 hover:shadow-lg">
       <div className="flex items-center justify-between gap-2">
-        <strong className="text-base text-slate-900">
+        <strong className="flex-1 text-base text-slate-900">
           {room.building_name} • {room.room_number}
         </strong>
         <span
-          className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${badgeTone}`}
+          className={`flex justify-center items-center whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium ${badgeTone}`}
         >
           Open until {until}
         </span>
