@@ -26,12 +26,8 @@ const MapView = ({ rooms }: MapViewProps) => {
   const center: [number, number] = [29.6516, -82.342];
 
   return (
-    <div id="map">
-      <MapContainer
-        center={center}
-        zoom={15}
-        style={{ height: "100%", width: "100%" }}
-      >
+    <div className="h-full w-full">
+      <MapContainer center={center} zoom={15} className="h-full w-full">
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
