@@ -12,6 +12,6 @@
     "strict": true,
     "types": ["node"]
   },
-  "include": ["server.ts", "mock/**/*"],
+  "include": ["server.ts", "mock/**/*", "scripts/**/*.ts", "lib/**/*.ts"],
   "exclude": ["dist"]
 }

@@ -8,6 +8,8 @@ dist/
 # Environment variables
 .env
 .env.*
+backend/data/
+playwright/.cache/
 
 # Logs
 *.log
