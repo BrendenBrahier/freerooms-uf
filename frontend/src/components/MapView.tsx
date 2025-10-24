@@ -19,6 +19,34 @@ interface BuildingGroup {
   rooms: DisplayRoom[];
 }
 
+type RoomStatus = "available" | "later" | "unavailable";
+
+const JS_DAY_TO_STARS_CODE: string[] = ["SU", "M", "T", "W", "TH", "F", "S"];
+
+function createMarkerIcon(fill: string, stroke: string): L.Icon {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="48" viewBox="0 0 32 48"><path d="M16 1C8.268 1 2 7.154 2 14.778c0 11.871 14 32.222 14 32.222s14-20.351 14-32.222C30 7.154 23.732 1 16 1Z" fill="${fill}" stroke="${stroke}" stroke-width="2"/><circle cx="16" cy="16" r="6" fill="#ffffff"/></svg>`;
+  const svgUrl = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+
+  return L.icon({
+    iconUrl: svgUrl,
+    iconSize: [32, 48],
+    iconAnchor: [16, 48],
+    popupAnchor: [0, -44],
+  });
+}
+
+function getRoomStatus(room: DisplayRoom, todayCode: string | null): RoomStatus {
+  if (room.isAvailableNow) {
+    return "available";
+  }
+
+  if (todayCode && room.nextAvailable?.day === todayCode) {
+    return "later";
+  }
+
+  return "unavailable";
+}
+
 const MapView = ({ rooms, selectedRoomId, onRoomFocus }: MapViewProps) => {
   // Ensure Leaflet marker assets load correctly when bundled
   const iconPrototype = L.Icon.Default.prototype as unknown as {
@@ -36,6 +64,16 @@ const MapView = ({ rooms, selectedRoomId, onRoomFocus }: MapViewProps) => {
   });
 
   const center: [number, number] = [29.6516, -82.342];
+
+  const statusIcons = useMemo(() => {
+    return {
+      available: createMarkerIcon("#10B981", "#047857"),
+      later: createMarkerIcon("#F97316", "#C2410C"),
+      unavailable: createMarkerIcon("#9CA3AF", "#4B5563"),
+    } as Record<RoomStatus, L.Icon>;
+  }, []);
+
+  const todayCode = JS_DAY_TO_STARS_CODE[new Date().getDay()] ?? null;
 
   const buildingGroups: BuildingGroup[] = useMemo(() => {
     const groups = new Map<string, BuildingGroup>();
@@ -198,11 +236,25 @@ const MapView = ({ rooms, selectedRoomId, onRoomFocus }: MapViewProps) => {
         {buildingGroups.map((group) => {
           const activeIndex = activeRoomIndex[group.buildingId] ?? 0;
           const room = group.rooms[activeIndex];
+          const status = getRoomStatus(room, todayCode);
+          const statusLabel =
+            status === "available"
+              ? "Available now"
+              : status === "later"
+              ? "Available later today"
+              : "Unavailable today";
+          const statusTone =
+            status === "available"
+              ? "text-emerald-600"
+              : status === "later"
+              ? "text-amber-600"
+              : "text-slate-500";
 
           return (
             <Marker
               key={group.buildingId}
               position={[group.lat, group.lng]}
+              icon={statusIcons[status]}
               ref={(instance) => {
                 markerRefs.current[group.buildingId] = instance;
               }}
@@ -232,12 +284,8 @@ const MapView = ({ rooms, selectedRoomId, onRoomFocus }: MapViewProps) => {
                   </strong>
                   <div className="mt-1 text-sm">
                     Status:{" "}
-                    <span
-                      className={
-                        room.isAvailableNow ? "text-green-600" : "text-red-600"
-                      }
-                    >
-                      {room.isAvailableNow ? "Available now" : "Unavailable"}
+                    <span className={statusTone}>
+                      {statusLabel}
                     </span>
                     {room.nextAvailable ? (
                       <>

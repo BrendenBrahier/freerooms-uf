@@ -40,7 +40,7 @@ const AMENITY_CANONICAL_MAP: Record<string, string> = {
   dry_erase: "chalkboard",
   markerboard: "chalkboard",
   whiteboardmobile: "chalkboard",
-  "whiteboard_or_chalkboard": "chalkboard",
+  whiteboard_or_chalkboard: "chalkboard",
   power: "power",
   outlets: "power",
   "power-outlets": "power",
@@ -74,7 +74,11 @@ const AMENITY_FILTER_OPTIONS: Array<{
   icon: string;
 }> = [
   { slug: "ada", label: "ADA Accessible", icon: ADAIcon },
-  { slug: "chalkboard", label: "Whiteboard / Chalkboard", icon: ChalkboardIcon },
+  {
+    slug: "chalkboard",
+    label: "Whiteboard / Chalkboard",
+    icon: ChalkboardIcon,
+  },
   { slug: "power", label: "Student Power", icon: PowerIcon },
   { slug: "projector", label: "Projector", icon: ProjectorIcon },
 ];
@@ -232,12 +236,7 @@ const App = () => {
   );
 
   const filteredRooms: DisplayRoom[] = useMemo(() => {
-    return filterRooms(
-      displayRooms,
-      query,
-      minCapacity,
-      selectedAmenities
-    );
+    return filterRooms(displayRooms, query, minCapacity, selectedAmenities);
   }, [displayRooms, minCapacity, query, selectedAmenities]);
 
   useEffect(() => {
