@@ -7,43 +7,28 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { createClient } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
-
-// Define interfaces for type safety
-interface Room {
-  room_id: string;
-  building_id: string;
-  building_name: string;
-  room_number: string;
-  lat: number;
-  lng: number;
-  capacity: number;
-  amenities: string[];
-  as_of: string;
-  is_open: boolean;
-  open_until: string;
-  reason: string;
-  closes_in_minutes: number;
-  source_system: string;
-  last_refresh: string;
-}
-
-interface Building {
-  building_id: string;
-  name: string;
-  lat: number;
-  lng: number;
-}
+import {
+  buildAvailabilityDataset,
+  type AvailabilityDataset,
+  type BuildingAvailability,
+  type RoomAvailability,
+  type SizeAvailability,
+  type RawClassroomDataset,
+  type RawStarsData,
+  PERIOD_START_TIMES,
+  applyRealtimeStatus,
+  normalizeAvailabilityDataset,
+} from "./lib/availability.js";
 
 dotenv.config();
 
 const supabaseUrl: string | undefined = process.env.SUPABASE_URL;
 const supabaseKey: string | undefined = process.env.SUPABASE_SERVICE_ROLE;
-const supabase: SupabaseClient | null = supabaseUrl && supabaseKey
-  ? createClient(supabaseUrl, supabaseKey)
-  : null;
+const supabase: SupabaseClient | null =
+  supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 if (!supabase) {
-  console.warn("Supabase credentials missing; continuing with mock data only.");
+  console.warn("Supabase credentials missing; continuing with cached data only.");
 }
 
 const __filename: string = fileURLToPath(import.meta.url);
@@ -56,55 +41,222 @@ app.use(morgan("dev"));
 
 const PORT: string | number = process.env.PORT || 4000;
 
-// Simple health check
-app.get("/api/health", (req: Request, res: Response) => {
-  res.json({ ok: true, env: process.env.NODE_ENV || "dev" });
-});
+function resolvePath(rel: string): string {
+  return path.join(__dirname, rel);
+}
 
-// Load mock rooms
-function loadRooms(): Room[] {
+function readJsonFile<T>(relativePath: string): T | null {
   try {
-    const file: string = path.join(__dirname, "mock", "rooms.json");
-    const raw: string = fs.readFileSync(file, "utf8");
-    return JSON.parse(raw) as Room[];
+    const filePath = resolvePath(relativePath);
+    const raw = fs.readFileSync(filePath, "utf8");
+    return JSON.parse(raw) as T;
   } catch (error) {
-    console.error("Failed to load mock room data", error);
-    return [];
+    console.warn(`Unable to read ${relativePath}:`, error);
+    return null;
   }
 }
 
-// Derived computation: open_until already computed in mock, but here we could compute it
+async function loadAvailabilityDataset(): Promise<AvailabilityDataset> {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from("room_availability_snapshots")
+        .select("data, term, fetched_at")
+        .order("fetched_at", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (!error && data?.data) {
+        return normalizeAvailabilityDataset(
+          data.data as AvailabilityDataset
+        );
+      }
+      if (error) {
+        console.warn("Supabase query failed; falling back to local cache:", error);
+      }
+    } catch (err) {
+      console.warn("Supabase unavailable; falling back to local cache:", err);
+    }
+  }
+
+  const stars = readJsonFile<RawStarsData>("data/stars-open-rooms.json");
+  const classrooms = readJsonFile<RawClassroomDataset>("data/classrooms.json");
+  const dataset = buildAvailabilityDataset(stars, classrooms);
+  return normalizeAvailabilityDataset(dataset);
+}
+
+const AVAILABILITY_DATASET: AvailabilityDataset = await loadAvailabilityDataset();
+
+function filterAvailability(
+  dataset: AvailabilityDataset,
+  filters: {
+    size?: string | null;
+    buildingId?: string | null;
+    buildingCode?: string | null;
+    roomNumber?: string | null;
+  }
+): AvailabilityDataset {
+  const sizeFilter = filters.size?.toUpperCase() ?? null;
+  const buildingIdFilter = filters.buildingId ?? null;
+  const buildingCodeFilter = filters.buildingCode
+    ? filters.buildingCode.toUpperCase()
+    : null;
+  const roomFilter = filters.roomNumber
+    ? filters.roomNumber.toUpperCase()
+    : null;
+
+  const filteredBuildings: BuildingAvailability[] = dataset.buildings
+    .filter((building: BuildingAvailability) => {
+      if (buildingIdFilter && building.id !== buildingIdFilter) return false;
+      if (
+        buildingCodeFilter &&
+        building.code?.toUpperCase() !== buildingCodeFilter
+      ) {
+        return false;
+      }
+      return true;
+    })
+    .map((building: BuildingAvailability) => {
+      const rooms = building.rooms
+        .filter((room: RoomAvailability) => {
+          if (roomFilter && room.number.toUpperCase() !== roomFilter) {
+            return false;
+          }
+          return true;
+        })
+        .map((room: RoomAvailability) => {
+          let availability: Record<string, SizeAvailability> = {};
+
+          if (sizeFilter) {
+            const selected = room.availability[sizeFilter];
+            if (selected && selected.periods.length > 0) {
+              availability = {
+                [sizeFilter]: {
+                  periods: selected.periods.map((entry) => ({ ...entry })),
+                },
+              };
+            }
+          } else {
+            availability = Object.fromEntries(
+              Object.entries(room.availability).map(([size, record]) => [
+                size,
+                {
+                  periods: record.periods.map((entry) => ({ ...entry })),
+                },
+              ])
+            );
+          }
+
+          return {
+            number: room.number,
+            metadata: room.metadata,
+            availability,
+          };
+        })
+        .filter((room: {
+          number: string;
+          metadata?: RoomAvailability["metadata"];
+          availability: Record<string, SizeAvailability>;
+        }) => {
+          const total = (Object.values(room.availability) as SizeAvailability[]).reduce<number>(
+            (sum, record) => sum + record.periods.length,
+            0
+          );
+          return total > 0;
+        });
+
+      return {
+        id: building.id,
+        code: building.code,
+        name: building.name,
+        campusId: building.campusId,
+        lat: building.lat,
+        lng: building.lng,
+        rooms,
+      };
+    })
+    .filter((building) => building.rooms.length > 0);
+
+  return {
+    fetchedAt: dataset.fetchedAt,
+    term: dataset.term,
+    classSizes: dataset.classSizes,
+    buildings: filteredBuildings,
+  };
+}
+
+// ------------ Routes ------------
+
+app.get("/api/health", (_req: Request, res: Response) => {
+  res.json({ ok: true, env: process.env.NODE_ENV || "dev" });
+});
+
 app.get("/api/rooms/open", (req: Request, res: Response) => {
-  const now: Date = new Date();
-  const rooms: Room[] = loadRooms();
-  // naive filtering for demo purposes
-  const openRooms = rooms.filter((room) => room.is_open);
-  // sort by 'closes_in_minutes' ascending, then by capacity desc
-  openRooms.sort((a, b) => (a.closes_in_minutes - b.closes_in_minutes) || (b.capacity - a.capacity));
-  res.json({ as_of: now.toISOString(), rooms: openRooms });
-});
+  const { size, buildingId, buildingCode, room } = req.query;
 
-// Single room details
-app.get("/api/rooms/:id", (req: Request, res: Response) => {
-  const rooms: Room[] = loadRooms();
-  const room = rooms.find((candidate) => candidate.room_id.toLowerCase() === req.params.id.toLowerCase());
-  if (!room) return res.status(404).json({ error: "Room not found" });
-  res.json(room);
-});
+  const response = applyRealtimeStatus(filterAvailability(AVAILABILITY_DATASET, {
+    size: size ? String(size) : null,
+    buildingId: buildingId ? String(buildingId) : null,
+    buildingCode: buildingCode ? String(buildingCode) : null,
+    roomNumber: room ? String(room) : null,
+  }));
 
-// In a real app, this would proxy STARS or a cache; for now, serves mock building list
-app.get("/api/buildings", (req: Request, res: Response) => {
-  const rooms: Room[] = loadRooms();
-  const buildingsMap: Map<string, Building> = new Map();
-  rooms.forEach((room) => {
-    buildingsMap.set(room.building_id, {
-      building_id: room.building_id,
-      name: room.building_name,
-      lat: room.lat,
-      lng: room.lng
-    });
+  res.json({
+    fetchedAt: response.fetchedAt,
+    term: response.term,
+    classSizes: response.classSizes,
+    buildings: response.buildings,
+    periodStartTimes: PERIOD_START_TIMES,
   });
-  res.json({ buildings: Array.from(buildingsMap.values()) });
+});
+
+app.get("/api/rooms/:id", (req: Request, res: Response) => {
+  const id = req.params.id.toUpperCase();
+  const match = id.match(/^([A-Z]{2,4})[-_]?([0-9A-Z]{1,4})$/);
+  if (!match) {
+    return res.status(400).json({ error: "Invalid room identifier format." });
+  }
+  const [, buildingCode, roomNumberRaw] = match;
+  const roomNumber = roomNumberRaw.padStart(4, "0");
+
+  const dataset = filterAvailability(AVAILABILITY_DATASET, {
+    buildingCode,
+    roomNumber,
+  });
+  applyRealtimeStatus(dataset);
+
+  const building = dataset.buildings[0];
+  const room = building?.rooms[0];
+
+  if (!building || !room) {
+    return res.status(404).json({ error: "Room not found" });
+  }
+
+  res.json({
+    building,
+    room,
+    fetchedAt: dataset.fetchedAt,
+    term: dataset.term,
+    periodStartTimes: PERIOD_START_TIMES,
+  });
+});
+
+app.get("/api/buildings", (_req: Request, res: Response) => {
+  const buildings = AVAILABILITY_DATASET.buildings.map((building) => ({
+    id: building.id,
+    code: building.code,
+    name: building.name,
+    campusId: building.campusId,
+    lat: building.lat,
+    lng: building.lng,
+    roomCount: building.rooms.length,
+  }));
+
+  res.json({
+    fetchedAt: AVAILABILITY_DATASET.fetchedAt,
+    term: AVAILABILITY_DATASET.term,
+    buildings,
+  });
 });
 
 app.listen(PORT, () => {

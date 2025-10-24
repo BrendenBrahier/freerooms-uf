@@ -1,0 +1,1 @@
+create table if not exists room_availability_snapshots (\n  term text primary key,\n  fetched_at timestamptz not null,\n  data jsonb not null,\n  created_at timestamptz default timezone('utc', now())\n);
