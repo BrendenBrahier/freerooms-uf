@@ -27,3 +27,5 @@ coverage/
 
 # TypeScript incremental build info
 *.tsbuildinfo
+AGENTS.md
+.github/*

@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import type { Map as LeafletMap, Marker as LeafletMarker } from "leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { DisplayRoom } from "../types";
 
 interface MapViewProps {
   rooms: DisplayRoom[];
+  selectedRoomId: string | null;
+  onRoomFocus?: (roomId: string) => void;
 }
 
 interface BuildingGroup {
@@ -16,7 +19,7 @@ interface BuildingGroup {
   rooms: DisplayRoom[];
 }
 
-const MapView = ({ rooms }: MapViewProps) => {
+const MapView = ({ rooms, selectedRoomId, onRoomFocus }: MapViewProps) => {
   // Ensure Leaflet marker assets load correctly when bundled
   const iconPrototype = L.Icon.Default.prototype as unknown as {
     _getIconUrl?: string;
@@ -70,6 +73,8 @@ const MapView = ({ rooms }: MapViewProps) => {
   const [activeRoomIndex, setActiveRoomIndex] = useState<
     Record<string, number>
   >({});
+  const markerRefs = useRef<Record<string, LeafletMarker | null>>({});
+  const [mapInstance, setMapInstance] = useState<LeafletMap | null>(null);
 
   useEffect(() => {
     setActiveRoomIndex((prev) => {
@@ -104,6 +109,15 @@ const MapView = ({ rooms }: MapViewProps) => {
     });
   }, [buildingGroups]);
 
+  useEffect(() => {
+    const validIds = new Set(buildingGroups.map((group) => group.buildingId));
+    Object.keys(markerRefs.current).forEach((key) => {
+      if (!validIds.has(key)) {
+        delete markerRefs.current[key];
+      }
+    });
+  }, [buildingGroups]);
+
   const handleNavigate = (buildingId: string, delta: 1 | -1) => {
     setActiveRoomIndex((prev) => {
       const group = buildingGroups.find(
@@ -116,9 +130,14 @@ const MapView = ({ rooms }: MapViewProps) => {
       const current = prev[buildingId] ?? 0;
       const count = group.rooms.length;
       const nextIndex = (current + delta + count) % count;
+      const nextRoom = group.rooms[nextIndex];
 
       if (nextIndex === current) {
         return prev;
+      }
+
+      if (nextRoom) {
+        onRoomFocus?.(nextRoom.id);
       }
 
       return {
@@ -128,9 +147,49 @@ const MapView = ({ rooms }: MapViewProps) => {
     });
   };
 
+  useEffect(() => {
+    if (!selectedRoomId) return;
+    const targetGroup = buildingGroups.find((group) =>
+      group.rooms.some((room) => room.id === selectedRoomId)
+    );
+    if (!targetGroup) return;
+
+    const nextIndex = targetGroup.rooms.findIndex(
+      (room) => room.id === selectedRoomId
+    );
+    if (nextIndex < 0) return;
+
+    setActiveRoomIndex((prev) => {
+      const current = prev[targetGroup.buildingId] ?? 0;
+      if (current === nextIndex) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [targetGroup.buildingId]: nextIndex,
+      };
+    });
+
+    const marker = markerRefs.current[targetGroup.buildingId];
+    if (marker) {
+      marker.openPopup();
+    }
+    if (mapInstance) {
+      mapInstance.flyTo(
+        [targetGroup.lat, targetGroup.lng],
+        Math.max(mapInstance.getZoom(), 16),
+        { duration: 0.4 }
+      );
+    }
+  }, [selectedRoomId, buildingGroups, mapInstance]);
+
   return (
     <div className="h-full w-full">
-      <MapContainer center={center} zoom={15}>
+      <MapContainer
+        center={center}
+        zoom={15}
+        whenCreated={(instance) => setMapInstance(instance)}
+      >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -140,7 +199,24 @@ const MapView = ({ rooms }: MapViewProps) => {
           const room = group.rooms[activeIndex];
 
           return (
-            <Marker key={group.buildingId} position={[group.lat, group.lng]}>
+            <Marker
+              key={group.buildingId}
+              position={[group.lat, group.lng]}
+              ref={(instance) => {
+                markerRefs.current[group.buildingId] = instance;
+              }}
+              eventHandlers={{
+                popupopen: () => {
+                  const focusedRoom =
+                    group.rooms[
+                      activeRoomIndex[group.buildingId] ?? 0
+                    ] ?? null;
+                  if (focusedRoom) {
+                    onRoomFocus?.(focusedRoom.id);
+                  }
+                },
+              }}
+            >
               <Popup>
                 <div style={{ minWidth: 240 }}>
                   {room.photo ? (

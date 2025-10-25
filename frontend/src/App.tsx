@@ -19,7 +19,6 @@ const DEFAULT_STATE: RoomsResponse = {
   term: "",
   classSizes: [],
   buildings: [],
-  periodStartTimes: {},
 };
 
 const AMENITY_CANONICAL_MAP: Record<string, string> = {
@@ -27,6 +26,7 @@ const AMENITY_CANONICAL_MAP: Record<string, string> = {
   accessibility: "ada",
   accessible: "ada",
   "ada-accessible": "ada",
+  ada_accessible: "ada",
   wheelchair: "ada",
   chalkboard: "chalkboard",
   whiteboard: "chalkboard",
@@ -36,6 +36,7 @@ const AMENITY_CANONICAL_MAP: Record<string, string> = {
   dry_erase: "chalkboard",
   markerboard: "chalkboard",
   whiteboardmobile: "chalkboard",
+  "whiteboard_or_chalkboard": "chalkboard",
   power: "power",
   outlets: "power",
   "power-outlets": "power",
@@ -44,6 +45,7 @@ const AMENITY_CANONICAL_MAP: Record<string, string> = {
   byod: "power",
   "byod-friendly": "power",
   charging: "power",
+  student_byod_power: "power",
   projector: "projector",
   projectors: "projector",
   "projector-hd": "projector",
@@ -93,7 +95,8 @@ function extractAmenitySlugs(
   if (!featureFlags) return [];
 
   const normalized = new Set<string>();
-  Object.keys(featureFlags).forEach((rawKey) => {
+  Object.entries(featureFlags).forEach(([rawKey, isEnabled]) => {
+    if (!isEnabled) return;
     const canonical = AMENITY_CANONICAL_MAP[rawKey.toLowerCase()];
     if (canonical) {
       normalized.add(canonical);
@@ -163,6 +166,7 @@ const App = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isFilterOpen, setIsFilterOpen] = useState<boolean>(true);
   const [periods, setPeriods] = useState<Array<number>>([]);
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -170,10 +174,14 @@ const App = () => {
     const loadOpenRooms = async () => {
       try {
         setIsLoading(true);
-        const payload = await fetchStudyRooms.rooms({});
+        if (isMounted) {
+          setError(null);
+        }
+        const payload = await fetchStudyRooms.rooms(
+          periods.length ? { periods } : {}
+        );
         if (isMounted) {
           setData(payload);
-          setError(null);
         }
       } catch (error) {
         console.error("Failed to fetch open rooms", error);
@@ -192,7 +200,7 @@ const App = () => {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [periods]);
 
   const periodPressed = (period: number) => {
     setPeriods((prev) =>
@@ -210,6 +218,15 @@ const App = () => {
   const filteredRooms: DisplayRoom[] = useMemo(() => {
     return filterRooms(displayRooms, query, minCapacity);
   }, [displayRooms, minCapacity, query]);
+
+  useEffect(() => {
+    if (
+      selectedRoomId &&
+      !filteredRooms.some((room) => room.id === selectedRoomId)
+    ) {
+      setSelectedRoomId(null);
+    }
+  }, [filteredRooms, selectedRoomId]);
 
   const availabilitySnapshot = useMemo(() => {
     const total = filteredRooms.length;
@@ -251,7 +268,7 @@ const App = () => {
             </div>
           </header>
 
-          <section className="px-6 py-5">
+          <section className="px-6 py-4">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-slate-700">Filters</h2>
               <button
@@ -281,7 +298,7 @@ const App = () => {
             </div>
 
             {isFilterOpen ? (
-              <div className="mt-4 space-y-4 rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+              <div className="mt-4 space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex items-center justify-between">
                   <label
                     htmlFor="capacity-range"
@@ -290,42 +307,56 @@ const App = () => {
                     Minimum capacity
                   </label>
                   <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
-                    {minCapacity} seats
+                    {minCapacity} seat{minCapacity !== 1 ? "s" : ""}
                   </span>
                 </div>
-                <input
-                  id="capacity-range"
-                  type="range"
-                  min={1}
-                  max={700}
-                  value={minCapacity}
-                  onChange={handleMinCapacityChange}
-                  className="w-full accent-slate-600"
-                  aria-label="Minimum capacity slider"
-                />
-                <div className="flex items-center justify-between gap-2">
-                  <label
-                    htmlFor="capacity-number"
-                    className="text-xs text-slate-500"
-                  >
-                    Fine-tune
-                  </label>
+                <span className="flex flex-row items-center gap-2">
                   <input
-                    id="capacity-number"
-                    type="number"
+                    id="capacity-range"
+                    type="range"
                     min={1}
                     max={700}
                     value={minCapacity}
                     onChange={handleMinCapacityChange}
-                    className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-sm text-center shadow-inner focus:border-slate-400 focus:outline-none"
-                    aria-label="Minimum capacity input"
+                    className="w-full accent-slate-600 mr-2"
+                    aria-label="Minimum capacity slider"
                   />
-                </div>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={1.5}
+                    stroke="currentColor"
+                    className="size-4 stroke-4"
+                    onClick={() => setMinCapacity(minCapacity + 1)}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="m4.5 15.75 7.5-7.5 7.5 7.5"
+                    />
+                  </svg>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={1.5}
+                    stroke="currentColor"
+                    className="size-4 stroke-4"
+                    onClick={() => setMinCapacity(minCapacity - 1)}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="m19.5 8.25-7.5 7.5-7.5-7.5"
+                    />
+                  </svg>
+                </span>
                 <div>
                   <span className="text-sm font-medium text-slate-700">
                     Periods
                   </span>
-                  <div className="grid grid-cols-10 justify-center gap-1 mt-2">
+                  <div className="grid grid-cols-10 justify-center gap-1">
                     {Array.from({ length: 10 }, (_, i) => (
                       <button
                         key={i}
@@ -343,23 +374,6 @@ const App = () => {
                 </div>
               </div>
             ) : null}
-
-            <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
-              {!error && data.fetchedAt ? (
-                <span>
-                  Updated{" "}
-                  {new Date(data.fetchedAt).toLocaleString([], {
-                    month: "short",
-                    day: "numeric",
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
-                </span>
-              ) : (
-                <span>Fetching latest schedule…</span>
-              )}
-              <span>Term {data.term || "N/A"}</span>
-            </div>
           </section>
 
           {error ? (
@@ -372,12 +386,27 @@ const App = () => {
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto px-4 pb-8">
-              {availabilitySnapshot.total > 0 ? (
-                <p className="px-2 pb-3 text-xs uppercase tracking-wide text-slate-500">
-                  Showing {availabilitySnapshot.total} rooms
-                </p>
-              ) : null}
-              <StudyContainer filteredRooms={filteredRooms} />
+              <StudyContainer
+                filteredRooms={filteredRooms}
+                selectedRoomId={selectedRoomId}
+                onSelectRoom={setSelectedRoomId}
+              />
+              <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+                {!error && data.fetchedAt ? (
+                  <span>
+                    Updated{" "}
+                    {new Date(data.fetchedAt).toLocaleString([], {
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                ) : (
+                  <span>Fetching latest schedule…</span>
+                )}
+                <span>Term {data.term || "N/A"}</span>
+              </div>
             </div>
           )}
         </div>
@@ -393,7 +422,11 @@ const App = () => {
             aria-label="Search"
           />
         </div>
-        <MapView rooms={filteredRooms} />
+        <MapView
+          rooms={filteredRooms}
+          selectedRoomId={selectedRoomId}
+          onRoomFocus={setSelectedRoomId}
+        />
       </main>
     </div>
   );

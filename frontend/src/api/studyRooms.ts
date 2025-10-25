@@ -22,18 +22,26 @@ import type { RoomsResponse } from "../types";
 
 const BASE = "/api";
 
+export interface RoomsQueryParams {
+  size?: number;
+  buildingId?: string;
+  buildingCode?: string;
+  room?: string;
+  periods?: number[];
+}
+
 export const fetchStudyRooms = {
-  rooms: async (params: {
-    size?: number;
-    buildingId?: string;
-    buildingCode?: string;
-    room?: string;
-  }): Promise<RoomsResponse> => {
+  rooms: async (params: RoomsQueryParams = {}): Promise<RoomsResponse> => {
+    const { periods, ...rest } = params;
+    const query: Record<string, unknown> = { ...rest };
+    if (periods && periods.length > 0) {
+      query.periods = periods.join(",");
+    }
+
     const response = await axios.get<RoomsResponse>(`${BASE}/rooms/open`, {
-      params,
+      params: query,
     });
     return response.data;
   },
 };
-
 

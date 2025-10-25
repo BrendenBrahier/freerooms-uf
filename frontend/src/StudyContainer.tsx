@@ -3,9 +3,15 @@ import StudySpot from "./components/StudySpot";
 
 interface StudyContainerProps {
   filteredRooms: DisplayRoom[];
+  selectedRoomId: string | null;
+  onSelectRoom: (roomId: string) => void;
 }
 
-const StudyContainer: React.FC<StudyContainerProps> = ({ filteredRooms }) => {
+const StudyContainer: React.FC<StudyContainerProps> = ({
+  filteredRooms,
+  selectedRoomId,
+  onSelectRoom,
+}) => {
   if (filteredRooms.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-6 text-sm text-slate-600">
@@ -16,9 +22,14 @@ const StudyContainer: React.FC<StudyContainerProps> = ({ filteredRooms }) => {
   }
 
   return (
-    <ul className="space-y-4" aria-live="polite">
+    <ul className="space-y-4 p-1" aria-live="polite">
       {filteredRooms.map((room) => (
-        <StudySpot key={room.id} room={room} />
+        <StudySpot
+          key={room.id}
+          room={room}
+          isActive={room.id === selectedRoomId}
+          onSelect={() => onSelectRoom(room.id)}
+        />
       ))}
     </ul>
   );

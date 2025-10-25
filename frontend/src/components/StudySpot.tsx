@@ -19,9 +19,11 @@ const AMENITY_CONFIG: Record<string, { icon: string; label: string }> = {
 
 interface StudySpotProps {
   room: DisplayRoom;
+  isActive: boolean;
+  onSelect: () => void;
 }
 
-const StudySpot: React.FC<StudySpotProps> = ({ room }) => {
+const StudySpot: React.FC<StudySpotProps> = ({ room, isActive, onSelect }) => {
   const badgeTone = room.isAvailableNow
     ? "bg-emerald-100 text-emerald-700"
     : "bg-amber-100 text-amber-800";
@@ -74,35 +76,49 @@ const StudySpot: React.FC<StudySpotProps> = ({ room }) => {
     );
   }
 
+  const cardClasses = [
+    "w-full text-left",
+    "rounded-xl border p-2 shadow-sm transition",
+    "hover:border-slate-300 hover:shadow-lg hover:scale-[101%]",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300",
+    isActive
+      ? "border-blue-500 ring-2 ring-blue-200"
+      : "border-slate-200 bg-white/90",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <li className="rounded-xl border border-slate-200 p-2 m-4shadow-md transition hover:border-slate-300 hover:shadow-lg hover:scale-[101%]">
-      <div className="flex flex-col">
-        <div>
-          <img
-            src={room.photo ?? Temp}
-            alt={`${room.buildingName} ${room.roomNumber}`}
-            className="w-full h-40 object-cover rounded-md mb-4"
-          />
-        </div>
-        <strong className="flex-1 text-base text-slate-900">
-          {room.buildingName} • {room.roomNumber}
-        </strong>
-        <div className="flex items-center justify-between gap-2">
-          <span
-            className={`flex justify-center items-center whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium ${badgeTone}`}
-          >
-            {availabilityLabel}
-          </span>
-        </div>
-        <p className="mt-2 text-sm text-slate-600">
-          Capacity: {room.capacity ?? "Not listed"}
-        </p>
-        <div className="flex flex-wrap justify-between items-center gap-2 text-sm text-slate-600">
-          <div className="flex w-[40%]">
-            {roomAmenitiesRender(room.amenities)}
+    <li>
+      <button type="button" onClick={onSelect} className={cardClasses}>
+        <div className="flex flex-col">
+          <div>
+            <img
+              src={room.photo ?? Temp}
+              alt={`${room.buildingName} ${room.roomNumber}`}
+              className="w-full h-40 object-cover rounded-md mb-4"
+            />
+          </div>
+          <strong className="flex-1 text-base text-slate-900">
+            {room.buildingName} • {room.roomNumber}
+          </strong>
+          <div className="flex items-center justify-between gap-2">
+            <span
+              className={`flex justify-center items-center whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium ${badgeTone}`}
+            >
+              {availabilityLabel}
+            </span>
+          </div>
+          <p className="mt-2 text-sm text-slate-600">
+            Capacity: {room.capacity ?? "Not listed"}
+          </p>
+          <div className="flex flex-wrap justify-between items-center gap-2 text-sm text-slate-600">
+            <div className="flex w-[40%]">
+              {roomAmenitiesRender(room.amenities)}
+            </div>
           </div>
         </div>
-      </div>
+      </button>
     </li>
   );
 };

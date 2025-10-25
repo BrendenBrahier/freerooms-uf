@@ -14,7 +14,7 @@ export interface NextAvailability {
 }
 
 export interface SizeAvailability {
-  periods: PeriodEntry[];
+  periods?: PeriodEntry[];
   isAvailableNow?: boolean;
   nextAvailable?: NextAvailability | null;
 }
@@ -49,7 +49,7 @@ export interface RoomsResponse {
   term: string;
   classSizes: string[];
   buildings: BuildingAvailability[];
-  periodStartTimes: Record<string, string>;
+  periodStartTimes?: Record<string, string>;
 }
 
 export interface DisplayRoom {
