@@ -162,7 +162,7 @@ const App = () => {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isFilterOpen, setIsFilterOpen] = useState<boolean>(true);
-  const [Periods] = useState<Array<number>>([]);
+  const [periods, setPeriods] = useState<Array<number>>([]);
 
   useEffect(() => {
     let isMounted = true;
@@ -194,11 +194,13 @@ const App = () => {
     };
   }, []);
 
-  const periodPressed = (key: number) => {
-    if(Periods.includes(key+1)){
-      Periods.
-    }
-  }
+  const periodPressed = (period: number) => {
+    setPeriods((prev) =>
+      prev.includes(period)
+        ? prev.filter((p) => p !== period)
+        : [...prev, period]
+    );
+  };
 
   const displayRooms: DisplayRoom[] = useMemo(
     () => buildDisplayRooms(data),
@@ -236,7 +238,7 @@ const App = () => {
               <img src={logoUrl} alt="Logo" className="w-9 h-9" />
               <span>
                 <h1 className="text-xl font-semibold text-slate-900">
-                  Freeroom@<span className="text-blue-400">UF</span>
+                  Freerooms@<span className="text-blue-400">UF</span>
                 </h1>
               </span>
             </span>
@@ -328,11 +330,11 @@ const App = () => {
                       <button
                         key={i}
                         className={`px-2 py-1 text-xs bg-slate-200 rounded hover:bg-slate-300 ${
-                          Periods.includes(i + 1)
+                          periods.includes(i + 1)
                             ? "bg-slate-400 text-white"
                             : ""
                         }`}
-                        onClick={periodPressed}
+                        onClick={() => periodPressed(i + 1)}
                       >
                         {i + 1}
                       </button>
