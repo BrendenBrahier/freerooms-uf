@@ -52,12 +52,12 @@ You can capture a fresh dataset from STARS and cache it locally for development.
    ```bash
 npx tsx scripts/fetch-stars.ts --term "Fall 2025" --sizes 10,25,50
 ```
-   The script saves the authenticated responses to `backend/data/stars-open-rooms.json` and logs each building/size combination it captured.
+   The script saves the authenticated responses to `backend/data/snapshots/stars-open-rooms.json` and logs each building/size combination it captured.
 
 These snapshots live under `backend/data/snapshots/` (they are ignored by git). The backend will prefer the Supabase copy when it exists, falling back to these local files only if needed.
 
 ## Optional: capture classroom metadata (photos + amenities)
-The UF IT site publishes room photos and equipment lists. You can snapshot that content into `backend/data/classrooms.json` for the API to consume.
+The UF IT site publishes room photos and equipment lists. You can snapshot that content into `backend/data/snapshots/classrooms.json` for the API to consume.
 
 ```bash
 cd backend
@@ -78,7 +78,7 @@ The server reads the merged availability dataset directly from Supabase so other
      created_at timestamptz default timezone('utc', now())
    );
    ```
-2. Generate fresh caches (`stars-open-rooms.json`, `classrooms.json`) with the scripts above.
+2. Generate fresh caches (`data/snapshots/stars-open-rooms.json`, `data/snapshots/classrooms.json`) with the scripts above.
 3. Publish the snapshot (runs fetch → scrape → publish in one step):
    ```bash
    cd backend
@@ -96,13 +96,15 @@ All routes are served from the backend (`http://localhost:4000` in dev).
   - `buildingId`: STARS building ID (e.g., `B800000007`)  
   - `buildingCode`: campus code (e.g., `AND`)  
   - `room`: room number (e.g., `0013`)  
+  - `periods`: comma-separated list of period numbers (e.g., `periods=2,3,E1`). When provided, only rooms with availability in those periods are returned and the response includes the filtered `periods` arrays for each size. When omitted, `periods` are excluded from the payload (you still get `isAvailableNow` / `nextAvailable`).  
   Response includes:
   - `periodStartTimes`: mapping of STARS periods to 12‑hour start times  
   - `buildings[]` → `rooms[]` → `availability` keyed by size  
   - Each size entry contains:
-    - `periods[]` with `day`, `period`, `startTime`, `endTime` (12‑hour strings)  
+    - `periods[]` (only when `periods` query param is supplied) with `day`, `period`, `startTime`, `endTime`  
     - `isAvailableNow` (boolean) based on current Eastern time  
-    - `nextAvailable` (next day/period/time if the room is currently unavailable)
+    - `nextAvailable` (next day/period/time if the room is currently unavailable)  
+  - `metadata.featureFlags` only reports the supported filters (`student_byod_power`, `projector`, `whiteboard_or_chalkboard`, `ada_accessible`)
 - `GET /api/rooms/:id` (e.g., `/api/rooms/AND-0013`)  
   Returns the single building/room record with the same structure as above.
 - `GET /api/buildings`  
