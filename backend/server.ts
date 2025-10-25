@@ -94,7 +94,8 @@ function filterAvailability(
     buildingId?: string | null;
     buildingCode?: string | null;
     roomNumber?: string | null;
-  }
+  },
+  periodFilters?: Set<string> | null
 ): AvailabilityDataset {
   const sizeFilter = filters.size?.toUpperCase() ?? null;
   const buildingIdFilter = filters.buildingId ?? null;
@@ -117,53 +118,40 @@ function filterAvailability(
       return true;
     })
     .map((building: BuildingAvailability) => {
-      const rooms = building.rooms
-        .filter((room: RoomAvailability) => {
-          if (roomFilter && room.number.toUpperCase() !== roomFilter) {
-            return false;
-          }
-          return true;
-        })
-        .map((room: RoomAvailability) => {
-          let availability: Record<string, SizeAvailability> = {};
+      const rooms: RoomAvailability[] = [];
 
-          if (sizeFilter) {
-            const selected = room.availability[sizeFilter];
-            if (selected && selected.periods.length > 0) {
-              availability = {
-                [sizeFilter]: {
-                  periods: selected.periods.map((entry) => ({ ...entry })),
-                },
-              };
-            }
-          } else {
-            availability = Object.fromEntries(
-              Object.entries(room.availability).map(([size, record]) => [
-                size,
-                {
-                  periods: record.periods.map((entry) => ({ ...entry })),
-                },
-              ])
-            );
-          }
+      building.rooms.forEach((room: RoomAvailability) => {
+        if (roomFilter && room.number.toUpperCase() !== roomFilter) {
+          return;
+        }
 
-          return {
-            number: room.number,
-            metadata: room.metadata,
-            availability,
-          };
-        })
-        .filter((room: {
-          number: string;
-          metadata?: RoomAvailability["metadata"];
-          availability: Record<string, SizeAvailability>;
-        }) => {
-          const total = (Object.values(room.availability) as SizeAvailability[]).reduce<number>(
-            (sum, record) => sum + record.periods.length,
-            0
-          );
-          return total > 0;
+        const sizeEntries = sizeFilter
+          ? ([[sizeFilter, room.availability[sizeFilter]]] as Array<
+              [string, SizeAvailability | undefined]
+            >)
+          : (Object.entries(room.availability) as Array<
+              [string, SizeAvailability]
+            >);
+
+        const availability: Record<string, SizeAvailability> = {};
+
+        sizeEntries.forEach(([sizeKey, record]) => {
+          const cloned = cloneAvailabilityRecord(record, periodFilters);
+          if (cloned) {
+            availability[sizeKey] = cloned;
+          }
         });
+
+        if (Object.keys(availability).length === 0) {
+          return;
+        }
+
+        rooms.push({
+          number: room.number,
+          metadata: room.metadata,
+          availability,
+        });
+      });
 
       return {
         id: building.id,
@@ -193,13 +181,23 @@ app.get("/api/health", (_req: Request, res: Response) => {
 
 app.get("/api/rooms/open", (req: Request, res: Response) => {
   const { size, buildingId, buildingCode, room } = req.query;
+  const periodFilters = parsePeriodFilters(req.query.periods);
 
-  const response = applyRealtimeStatus(filterAvailability(AVAILABILITY_DATASET, {
-    size: size ? String(size) : null,
-    buildingId: buildingId ? String(buildingId) : null,
-    buildingCode: buildingCode ? String(buildingCode) : null,
-    roomNumber: room ? String(room) : null,
-  }));
+  const dataset = filterAvailability(
+    AVAILABILITY_DATASET,
+    {
+      size: size ? String(size) : null,
+      buildingId: buildingId ? String(buildingId) : null,
+      buildingCode: buildingCode ? String(buildingCode) : null,
+      roomNumber: room ? String(room) : null,
+    },
+    periodFilters
+  );
+
+  const response = applyRealtimeStatus(dataset);
+  if (!periodFilters) {
+    stripPeriods(response);
+  }
 
   res.json({
     fetchedAt: response.fetchedAt,
@@ -219,11 +217,16 @@ app.get("/api/rooms/:id", (req: Request, res: Response) => {
   const [, buildingCode, roomNumberRaw] = match;
   const roomNumber = roomNumberRaw.padStart(4, "0");
 
-  const dataset = filterAvailability(AVAILABILITY_DATASET, {
-    buildingCode,
-    roomNumber,
-  });
+  const dataset = filterAvailability(
+    AVAILABILITY_DATASET,
+    {
+      buildingCode,
+      roomNumber,
+    },
+    null
+  );
   applyRealtimeStatus(dataset);
+  stripPeriods(dataset);
 
   const building = dataset.buildings[0];
   const room = building?.rooms[0];
@@ -262,3 +265,43 @@ app.get("/api/buildings", (_req: Request, res: Response) => {
 app.listen(PORT, () => {
   console.log(`FreeRooms backend listening on http://localhost:${PORT}`);
 });
+
+function cloneAvailabilityRecord(
+  record: SizeAvailability | undefined,
+  periodFilters?: Set<string> | null
+): SizeAvailability | null {
+  if (!record) return null;
+  const srcPeriods = record.periods ?? [];
+  let periods = srcPeriods;
+  if (periodFilters) {
+    periods = srcPeriods.filter((entry) => periodFilters.has(entry.period));
+    if (periods.length === 0) return null;
+  }
+
+  return {
+    periods: periods.map((entry) => ({ ...entry })),
+    isAvailableNow: record.isAvailableNow,
+    nextAvailable: record.nextAvailable,
+  };
+}
+
+function parsePeriodFilters(value: unknown): Set<string> | null {
+  if (!value) return null;
+  const raw = Array.isArray(value) ? value : String(value).split(",");
+  const normalized = raw
+    .map((item) => String(item).trim().toUpperCase())
+    .filter(Boolean);
+  return normalized.length ? new Set(normalized) : null;
+}
+
+function stripPeriods(dataset: AvailabilityDataset) {
+  dataset.buildings.forEach((building) => {
+    building.rooms.forEach((room) => {
+      Object.values(room.availability).forEach((record) => {
+        if (record.periods) {
+          delete record.periods;
+        }
+      });
+    });
+  });
+}

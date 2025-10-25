@@ -22,14 +22,14 @@ interface Feature {
 }
 
 interface ClassroomRecord {
-  buildingCode: string;
+  buildingCode?: string;
+  buildingName: string;
   roomNumber: string;
   name: string;
   displayName: string;
   capacity: number | null;
   photo: string | null;
   gallery: string[];
-  features: Feature[];
   featureFlags: Record<string, boolean>;
   detailUrl: string;
 }
@@ -88,14 +88,61 @@ function parseListing(html: string): ListingCard[] {
   return cards;
 }
 
-function extractIdentifiers(text: string): { building: string; room: string } | null {
+function extractIdentifiers(text: string): {
+  buildingCode?: string;
+  buildingName?: string;
+  room: string;
+} | null {
   const cleaned = text.trim();
-  // Patterns like "AND 0013", "Anderson Hall 0013", "MAT-0102"
-  const match = cleaned.match(/([A-Za-z]{2,4})[\s\-]+0*([0-9A-Za-z]+)/);
+  if (!cleaned) return null;
+
+  const codeMatch = cleaned.match(/([A-Za-z]{2,4})[\s\-]+0*([0-9A-Za-z]+)/);
+  if (codeMatch) {
+    return {
+      buildingCode: codeMatch[1].toUpperCase(),
+      room: codeMatch[2].padStart(4, "0"),
+    };
+  }
+
+  const nameMatch = cleaned.match(/(.+?)\s+([0-9A-Za-z]{1,4})$/);
+  if (nameMatch) {
+    return {
+      buildingName: nameMatch[1].trim(),
+      room: nameMatch[2].padStart(4, "0"),
+    };
+  }
+
+  return null;
+}
+
+function parseTitle(title: string): { buildingName: string; roomNumber: string } | null {
+  const trimmed = title.trim();
+  const match = trimmed.match(/(.+?)\s+([0-9A-Za-z]{1,4})$/);
   if (!match) return null;
-  const building = match[1].toUpperCase();
-  const room = match[2].padStart(4, "0");
-  return { building, room };
+  return {
+    buildingName: match[1].trim(),
+    roomNumber: match[2].padStart(4, "0"),
+  };
+}
+
+function pickRelevantFeatureFlags(features: Feature[]): Record<string, boolean> {
+  const flags: Record<string, boolean> = {};
+  features.forEach((feature) => {
+    const label = feature.label.toLowerCase();
+    if (label.includes("student") && label.includes("byod")) {
+      flags.student_byod_power = true;
+    }
+    if (label.includes("projector")) {
+      flags.projector = true;
+    }
+    if (label.includes("whiteboard") || label.includes("chalkboard")) {
+      flags.whiteboard_or_chalkboard = true;
+    }
+    if (label.includes("ada") && label.includes("accessible")) {
+      flags.ada_accessible = true;
+    }
+  });
+  return flags;
 }
 
 function parseDetail(
@@ -126,7 +173,7 @@ function parseDetail(
   const gallery = new Set<string>();
   if (fallbackImage) gallery.add(buildUrl(fallbackImage));
 
-  $("img").each((_, el) => {
+  $(".image-wrap img, .lb-gal-img, a[data-lightbox] img").each((_, el) => {
     const src = $(el).attr("src");
     if (!src) return;
     if (/\/classrooms\/media\/atufledu\/classrooms\//.test(src)) {
@@ -169,26 +216,36 @@ async function main() {
       const detailHtml = await fetchHtml(card.detailPath);
       const detail = parseDetail(detailHtml, card.image);
 
+      const titleInfo = parseTitle(card.title);
       const identifiers =
         extractIdentifiers(detail.codeText) ||
         extractIdentifiers(card.title) ||
-        null;
+        (titleInfo
+          ? { buildingName: titleInfo.buildingName, room: titleInfo.roomNumber }
+          : null);
 
       if (!identifiers) {
         console.warn(`  ! Unable to parse building/room for "${card.title}"`);
         continue;
       }
 
+      const buildingName =
+        identifiers.buildingName ??
+        titleInfo?.buildingName ??
+        card.title.replace(/\d+.*/, "").trim();
+
+      const relevantFlags = pickRelevantFeatureFlags(detail.features);
+
       results.push({
-        buildingCode: identifiers.building,
+        buildingCode: identifiers.buildingCode,
+        buildingName,
         roomNumber: identifiers.room,
-        name: `${identifiers.building} ${identifiers.room}`,
+        name: `${identifiers.buildingCode ?? buildingName} ${identifiers.room}`,
         displayName: card.title,
         capacity: detail.capacity,
         photo: detail.gallery[0] ?? null,
         gallery: detail.gallery,
-        features: detail.features,
-        featureFlags: detail.featureFlags,
+        featureFlags: relevantFlags,
         detailUrl,
       });
     } catch (error) {
@@ -197,10 +254,15 @@ async function main() {
   }
 
   results.sort((a, b) => {
-    if (a.buildingCode === b.buildingCode) {
-      return a.roomNumber.localeCompare(b.roomNumber);
+    if (a.buildingCode && b.buildingCode) {
+      if (a.buildingCode === b.buildingCode) {
+        return a.roomNumber.localeCompare(b.roomNumber);
+      }
+      return a.buildingCode.localeCompare(b.buildingCode);
     }
-    return a.buildingCode.localeCompare(b.buildingCode);
+    if (a.buildingCode) return -1;
+    if (b.buildingCode) return 1;
+    return a.displayName.localeCompare(b.displayName);
   });
 
   const payload = {

@@ -16,7 +16,7 @@ export interface NextAvailability {
 }
 
 export interface SizeAvailability {
-  periods: PeriodEntry[];
+  periods?: PeriodEntry[];
   isAvailableNow?: boolean;
   nextAvailable?: NextAvailability | null;
 }
@@ -25,7 +25,6 @@ interface RoomMetadata {
   capacity: number | null;
   photo: string | null;
   gallery: string[];
-  features: Array<{ slug: string; label: string }>;
   featureFlags: Record<string, boolean>;
   detailUrl: string;
 }
@@ -82,16 +81,17 @@ export interface RawClassroomFeature {
 }
 
 export interface RawClassroomRecord {
-  buildingCode: string;
+  buildingCode?: string;
+  buildingName: string;
   roomNumber: string;
   name: string;
   displayName: string;
   capacity: number | null;
   photo: string | null;
   gallery: string[];
-  features: RawClassroomFeature[];
   featureFlags: Record<string, boolean>;
   detailUrl: string;
+  features?: RawClassroomFeature[];
 }
 
 export interface RawClassroomDataset {
@@ -159,6 +159,10 @@ const DAY_LABELS: Record<string, string> = {
   S: "Saturday",
   SU: "Sunday",
 };
+
+function normalizeName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
 
 function formatTime12(hourMinute: string): string {
   const [hh, mm] = hourMinute.split(":").map(Number);
@@ -317,9 +321,10 @@ export function applyRealtimeStatus(
   dataset.buildings.forEach((building) => {
     building.rooms.forEach((room) => {
       Object.entries(room.availability).forEach(([size, record]) => {
-        const status = computeStatus(record.periods, context);
+        const periods = record.periods ?? [];
+        const status = computeStatus(periods, context);
         room.availability[size] = {
-          periods: record.periods.map((period) => ({ ...period })),
+          periods: periods.map((period) => ({ ...period })),
           isAvailableNow: status.isAvailableNow,
           nextAvailable: status.nextAvailable,
         };
@@ -343,13 +348,19 @@ export function buildAvailabilityDataset(
     };
   }
 
-  const classroomMap = new Map<string, RawClassroomRecord>();
-  if (classrooms?.rooms) {
-    classrooms.rooms.forEach((room) => {
-      const key = `${room.buildingCode.toUpperCase()}-${room.roomNumber.toUpperCase()}`;
-      classroomMap.set(key, room);
-    });
-  }
+const classroomMap = new Map<string, RawClassroomRecord>();
+if (classrooms?.rooms) {
+  classrooms.rooms.forEach((room) => {
+    const codeKey = room.buildingCode
+      ? `${room.buildingCode.toUpperCase()}-${room.roomNumber.toUpperCase()}`
+      : null;
+    const nameKey = room.buildingName
+      ? `${normalizeName(room.buildingName)}-${room.roomNumber.toUpperCase()}`
+      : null;
+    if (codeKey) classroomMap.set(codeKey, room);
+    if (nameKey) classroomMap.set(nameKey, room);
+  });
+}
 
   const buildingMap = new Map<
     string,
@@ -391,21 +402,23 @@ export function buildAvailabilityDataset(
             buildingRecord.code && roomNumber
               ? `${buildingRecord.code}-${roomNumber}`
               : null;
-          const meta = metaKey ? classroomMap.get(metaKey) : undefined;
-          roomRecord = {
-            number: roomNumber,
-            metadata: meta
-              ? {
-                  capacity: meta.capacity,
-                  photo: meta.photo,
-                  gallery: meta.gallery,
-                  features: meta.features,
-                  featureFlags: meta.featureFlags,
-                  detailUrl: meta.detailUrl,
-                }
-              : undefined,
-            availability: {},
-          };
+          const nameKey = `${normalizeName(buildingRecord.name)}-${roomNumber}`;
+          const meta =
+            (metaKey ? classroomMap.get(metaKey) : undefined) ??
+            classroomMap.get(nameKey);
+        roomRecord = {
+          number: roomNumber,
+          metadata: meta
+            ? {
+                capacity: meta.capacity,
+                photo: meta.photo,
+                gallery: meta.gallery,
+                featureFlags: meta.featureFlags ?? {},
+                detailUrl: meta.detailUrl,
+              }
+            : undefined,
+          availability: {},
+        };
           buildingRecord.roomsMap.set(roomNumber, roomRecord);
         }
 
@@ -489,7 +502,9 @@ export function normalizeAvailabilityDataset(
           Array.isArray((record as SizeAvailability).periods)
         ) {
           normalized[size] = {
-            periods: (record as SizeAvailability).periods.map(mapToPeriodEntry),
+            periods: ((record as SizeAvailability).periods ?? []).map(
+              mapToPeriodEntry
+            ),
           };
         } else {
           normalized[size] = { periods: [] };
