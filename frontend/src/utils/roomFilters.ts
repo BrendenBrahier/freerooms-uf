@@ -1,14 +1,23 @@
-import type { Room } from "../types";
+import type { DisplayRoom } from "../types";
 
-export function filterRooms(rooms: Room[], query: string, minCapacity: number): Room[] {
+export function filterRooms(
+  rooms: DisplayRoom[],
+  query: string,
+  minCapacity: number
+): DisplayRoom[] {
   const normalizedQuery = query.trim().toLowerCase();
   return rooms
-    .filter((room: Room) => room.capacity >= minCapacity)
-    .filter((room: Room) => {
+    .filter((room: DisplayRoom) => {
+      const capacity = room.capacity ?? 0;
+      return capacity >= minCapacity;
+    })
+    .filter((room: DisplayRoom) => {
       if (!normalizedQuery) return true;
       return (
-        room.building_name.toLowerCase().includes(normalizedQuery) ||
-        room.room_id.toLowerCase().includes(normalizedQuery)
+        room.buildingName.toLowerCase().includes(normalizedQuery) ||
+        `${room.buildingCode ?? ""}-${room.roomNumber}`
+          .toLowerCase()
+          .includes(normalizedQuery)
       );
     });
 }
