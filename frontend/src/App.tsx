@@ -13,6 +13,10 @@ import StudyContainer from "./StudyContainer";
 import { filterRooms } from "./utils/roomFilters";
 import logoUrl from "./assets/Logo.svg";
 import { fetchStudyRooms } from "./api/studyRooms";
+import ADAIcon from "./assets/ADA.svg";
+import ChalkboardIcon from "./assets/Chalkboard.svg";
+import PowerIcon from "./assets/Power.svg";
+import ProjectorIcon from "./assets/Projector.svg";
 
 const DEFAULT_STATE: RoomsResponse = {
   fetchedAt: "",
@@ -62,6 +66,17 @@ const AMENITY_DISPLAY_ORDER: string[] = [
   "chalkboard",
   "power",
   "projector",
+];
+
+const AMENITY_FILTER_OPTIONS: Array<{
+  slug: string;
+  label: string;
+  icon: string;
+}> = [
+  { slug: "ada", label: "ADA Accessible", icon: ADAIcon },
+  { slug: "chalkboard", label: "Whiteboard / Chalkboard", icon: ChalkboardIcon },
+  { slug: "power", label: "Student Power", icon: PowerIcon },
+  { slug: "projector", label: "Projector", icon: ProjectorIcon },
 ];
 
 function isSizeAvailable(entry?: SizeAvailability): boolean {
@@ -162,6 +177,7 @@ const App = () => {
   const [data, setData] = useState<RoomsResponse>(DEFAULT_STATE);
   const [minCapacity, setMinCapacity] = useState<number>(1);
   const [query, setQuery] = useState<string>("");
+  const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isFilterOpen, setIsFilterOpen] = useState<boolean>(true);
@@ -216,8 +232,13 @@ const App = () => {
   );
 
   const filteredRooms: DisplayRoom[] = useMemo(() => {
-    return filterRooms(displayRooms, query, minCapacity);
-  }, [displayRooms, minCapacity, query]);
+    return filterRooms(
+      displayRooms,
+      query,
+      minCapacity,
+      selectedAmenities
+    );
+  }, [displayRooms, minCapacity, query, selectedAmenities]);
 
   useEffect(() => {
     if (
@@ -244,6 +265,14 @@ const App = () => {
   const handleMinCapacityChange = (event: ChangeEvent<HTMLInputElement>) => {
     const nextValue = Number(event.target.value);
     setMinCapacity(Number.isFinite(nextValue) && nextValue > 0 ? nextValue : 1);
+  };
+
+  const toggleAmenityFilter = (slug: string) => {
+    setSelectedAmenities((current) =>
+      current.includes(slug)
+        ? current.filter((amenity) => amenity !== slug)
+        : [...current, slug]
+    );
   };
 
   return (
@@ -352,6 +381,40 @@ const App = () => {
                     />
                   </svg>
                 </span>
+                <div className="space-y-2">
+                  <span className="text-sm font-medium text-slate-700">
+                    Amenities
+                  </span>
+                  <div className="flex flex-wrap items-center gap-3">
+                    {AMENITY_FILTER_OPTIONS.map((option) => {
+                      const isSelected = selectedAmenities.includes(
+                        option.slug
+                      );
+                      return (
+                        <button
+                          key={option.slug}
+                          type="button"
+                          onClick={() => toggleAmenityFilter(option.slug)}
+                          className={`flex h-10 w-10 items-center justify-center rounded-full border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
+                            isSelected
+                              ? "border-blue-500 bg-blue-50 shadow-sm"
+                              : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                          }`}
+                          aria-pressed={isSelected}
+                          aria-label={option.label}
+                          title={option.label}
+                        >
+                          <img
+                            src={option.icon}
+                            alt=""
+                            aria-hidden="true"
+                            className="h-5 w-5"
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
                 <div>
                   <span className="text-sm font-medium text-slate-700">
                     Periods
@@ -413,14 +476,16 @@ const App = () => {
       </aside>
 
       <main className="relative h-[50vh] bg-slate-100 lg:h-screen">
-        <div className="absolute w-[90%] top-4 left-1/2 transform -translate-x-1/2 z-50 p-2 rounded-lg">
-          <input
-            placeholder="Search building or room…"
-            value={query}
-            onChange={handleQueryChange}
-            className="flex w-full rounded-lg px-3 py-2 text-sm shadow-sm outline-none transition focus:ring-2 bg-white border border-slate-300 focus:border-slate-400 focus:ring-slate-400/60"
-            aria-label="Search"
-          />
+        <div className="pointer-events-none absolute inset-x-4 top-4 z-[1001] flex justify-center">
+          <div className="pointer-events-auto w-full max-w-2xl rounded-full border border-slate-200 bg-white/95 shadow-lg backdrop-blur-sm">
+            <input
+              placeholder="Search building or room…"
+              value={query}
+              onChange={handleQueryChange}
+              className="w-full rounded-full border-0 bg-transparent px-5 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-0"
+              aria-label="Search"
+            />
+          </div>
         </div>
         <MapView
           rooms={filteredRooms}

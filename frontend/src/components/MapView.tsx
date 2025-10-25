@@ -188,6 +188,7 @@ const MapView = ({ rooms, selectedRoomId, onRoomFocus }: MapViewProps) => {
       <MapContainer
         center={center}
         zoom={15}
+        className="h-full w-full"
         whenCreated={(instance) => setMapInstance(instance)}
       >
         <TileLayer
