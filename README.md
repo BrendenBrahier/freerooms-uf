@@ -123,9 +123,7 @@ All availability calculations are done in real time using Eastern Time, so `isAv
 
 ## Next Steps
 
-- Replace mock data with a cache layer fed by STARS (scrape or API).
 - Compute `open_until` from (next class start) and (building close) with a buffer.
-- Add filters for amenities and planning mode.
 
 ## Tech Stack
 

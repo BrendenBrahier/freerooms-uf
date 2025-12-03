@@ -186,6 +186,7 @@ const App = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isFilterOpen, setIsFilterOpen] = useState<boolean>(true);
   const [periods, setPeriods] = useState<Array<number>>([]);
+  const [showAvailableOnly, setShowAvailableOnly] = useState<boolean>(false);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -236,8 +237,14 @@ const App = () => {
   );
 
   const filteredRooms: DisplayRoom[] = useMemo(() => {
-    return filterRooms(displayRooms, query, minCapacity, selectedAmenities);
-  }, [displayRooms, minCapacity, query, selectedAmenities]);
+    return filterRooms(
+      displayRooms,
+      query,
+      minCapacity,
+      selectedAmenities,
+      showAvailableOnly
+    );
+  }, [displayRooms, minCapacity, query, selectedAmenities, showAvailableOnly]);
 
   useEffect(() => {
     if (
@@ -273,6 +280,56 @@ const App = () => {
         : [...current, slug]
     );
   };
+
+  function formatMinutesTo12HourTime(totalMinutes: number): string {
+    // 1. Handle potential overflow past 24 hours (1440 minutes)
+    const minutesSinceMidnight = totalMinutes % 1440;
+
+    // 2. Calculate the 24-hour hours (0-23) and remaining minutes
+    const hours24 = Math.floor(minutesSinceMidnight / 60);
+    const minutes = minutesSinceMidnight % 60;
+
+    // 3. Determine the AM/PM suffix
+    const suffix = hours24 >= 12 ? "PM" : "AM";
+
+    // 4. Convert 24-hour hour to 12-hour hour:
+    //    - 0 (midnight) -> 12
+    //    - 1-11 -> 1-11
+    //    - 12 (noon) -> 12
+    //    - 13-23 -> 1-11
+    const hours12 = hours24 % 12 || 12; // Modulo 12, treating 0 as 12
+
+    // 5. Format the hours (no zero-padding for 12-hour hours, e.g., "9:30 AM" not "09:30 AM")
+    const formattedHours = String(hours12);
+
+    // 6. Format minutes with zero-padding
+    const formattedMinutes = String(minutes).padStart(2, "0");
+
+    return `${formattedHours}:${formattedMinutes} ${suffix}`;
+  }
+
+  // --- Main Function ---
+
+  /**
+   * Calculates the start and end times for a given interval index (i),
+   * based on the formulas (445 + i*65) and (445 + i*65 + 50),
+   * and returns them formatted as "{HH:MM} - {HH:MM}".
+   *
+   * @param i The index of the interval (0, 1, 2, ...).
+   * @returns The formatted time range string (e.g., "07:25 - 08:15").
+   */
+  function calculateTimeRange(i: number): string {
+    // 1. Calculate the total minutes for the start and end points
+    const startMinutes = 445 + i * 65;
+    const endMinutes = startMinutes + 50;
+
+    // 2. Format both minute counts into "HH:MM" strings
+    const startTimeString = formatMinutesTo12HourTime(startMinutes);
+    const endTimeString = formatMinutesTo12HourTime(endMinutes);
+
+    // 3. Return the result in the requested format
+    return `${startTimeString} - ${endTimeString}`;
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 lg:grid lg:grid-cols-[420px_1fr]">
@@ -346,7 +403,7 @@ const App = () => {
                     max={700}
                     value={minCapacity}
                     onChange={handleMinCapacityChange}
-                    className="w-full accent-slate-600 mr-2"
+                    className="w-full accent-slate-600 mr-2 appearance-auto"
                     aria-label="Minimum capacity slider"
                   />
                   <svg
@@ -356,7 +413,9 @@ const App = () => {
                     strokeWidth={1.5}
                     stroke="currentColor"
                     className="size-4 stroke-4"
-                    onClick={() => setMinCapacity(minCapacity + 1)}
+                    onClick={() =>
+                      minCapacity < 700 ? setMinCapacity(minCapacity + 1) : null
+                    }
                   >
                     <path
                       strokeLinecap="round"
@@ -371,7 +430,9 @@ const App = () => {
                     strokeWidth={1.5}
                     stroke="currentColor"
                     className="size-4 stroke-4"
-                    onClick={() => setMinCapacity(minCapacity - 1)}
+                    onClick={() =>
+                      minCapacity > 1 ? setMinCapacity(minCapacity - 1) : null
+                    }
                   >
                     <path
                       strokeLinecap="round"
@@ -414,11 +475,37 @@ const App = () => {
                     })}
                   </div>
                 </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-slate-700">
+                    Available Now
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const enabled = !showAvailableOnly;
+                      setShowAvailableOnly(enabled);
+                      if (enabled) {
+                        setPeriods([]);
+                      }
+                    }}
+                    aria-pressed={showAvailableOnly}
+                    aria-label="Show only rooms available now"
+                    className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
+                      showAvailableOnly ? "bg-blue-600" : "bg-slate-300"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                        showAvailableOnly ? "translate-x-4" : "translate-x-0.5"
+                      }`}
+                    />
+                  </button>
+                </div>
                 <div>
                   <span className="text-sm font-medium text-slate-700">
                     Periods
                   </span>
-                  <div className="grid grid-cols-10 justify-center gap-1">
+                  <div className="grid grid-cols-2 justify-center gap-1">
                     {Array.from({ length: 10 }, (_, i) => (
                       <button
                         key={i}
@@ -429,7 +516,7 @@ const App = () => {
                         }`}
                         onClick={() => periodPressed(i + 1)}
                       >
-                        {i + 1}
+                        {calculateTimeRange(i)}
                       </button>
                     ))}
                   </div>

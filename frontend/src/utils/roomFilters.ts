@@ -4,10 +4,12 @@ export function filterRooms(
   rooms: DisplayRoom[],
   query: string,
   minCapacity: number,
-  requiredAmenities: string[]
+  requiredAmenities: string[],
+  availableOnly: boolean = false
 ): DisplayRoom[] {
   const normalizedQuery = query.trim().toLowerCase();
   return rooms
+    .filter((room: DisplayRoom) => (availableOnly ? room.isAvailableNow : true))
     .filter((room: DisplayRoom) => {
       const capacity = room.capacity ?? 0;
       return capacity >= minCapacity;

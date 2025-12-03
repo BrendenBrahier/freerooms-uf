@@ -29,7 +29,9 @@ const StudySpot: React.FC<StudySpotProps> = ({ room, isActive, onSelect }) => {
     : "bg-amber-100 text-amber-800";
 
   const availabilityLabel = room.isAvailableNow
-    ? "Available now"
+    ? room.nextAvailable
+      ? `Open until ${room.nextAvailable.startTime}`
+      : "Open now"
     : room.nextAvailable
     ? `Next: ${room.nextAvailable.dayLabel} • ${room.nextAvailable.startTime}`
     : "No availability listed";

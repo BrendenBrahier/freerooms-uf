@@ -20,22 +20,32 @@ interface BuildingGroup {
 }
 
 type RoomStatus = "available" | "later" | "unavailable";
-
 const JS_DAY_TO_STARS_CODE: string[] = ["SU", "M", "T", "W", "TH", "F", "S"];
+function createMarkerIcon(
+  fill: string,
+  stroke: string,
+  scale: number = 1
+): L.Icon {
+  const baseWidth = 32;
+  const baseHeight = 48;
+  const width = baseWidth * scale;
+  const height = baseHeight * scale;
 
-function createMarkerIcon(fill: string, stroke: string): L.Icon {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="48" viewBox="0 0 32 48"><path d="M16 1C8.268 1 2 7.154 2 14.778c0 11.871 14 32.222 14 32.222s14-20.351 14-32.222C30 7.154 23.732 1 16 1Z" fill="${fill}" stroke="${stroke}" stroke-width="2"/><circle cx="16" cy="16" r="6" fill="#ffffff"/></svg>`;
   const svgUrl = `data:image/svg+xml,${encodeURIComponent(svg)}`;
 
   return L.icon({
     iconUrl: svgUrl,
-    iconSize: [32, 48],
-    iconAnchor: [16, 48],
-    popupAnchor: [0, -44],
+    iconSize: [width, height],
+    iconAnchor: [width / 2, height],
+    popupAnchor: [0, -height + 4],
   });
 }
 
-function getRoomStatus(room: DisplayRoom, todayCode: string | null): RoomStatus {
+function getRoomStatus(
+  room: DisplayRoom,
+  todayCode: string | null
+): RoomStatus {
   if (room.isAvailableNow) {
     return "available";
   }
@@ -70,6 +80,14 @@ const MapView = ({ rooms, selectedRoomId, onRoomFocus }: MapViewProps) => {
       available: createMarkerIcon("#10B981", "#047857"),
       later: createMarkerIcon("#F97316", "#C2410C"),
       unavailable: createMarkerIcon("#9CA3AF", "#4B5563"),
+    } as Record<RoomStatus, L.Icon>;
+  }, []);
+
+  const statusIconsHovered = useMemo(() => {
+    return {
+      available: createMarkerIcon("#10B981", "#047857", 1.25),
+      later: createMarkerIcon("#F97316", "#C2410C", 1.25),
+      unavailable: createMarkerIcon("#9CA3AF", "#4B5563", 1.25),
     } as Record<RoomStatus, L.Icon>;
   }, []);
 
@@ -223,12 +241,7 @@ const MapView = ({ rooms, selectedRoomId, onRoomFocus }: MapViewProps) => {
 
   return (
     <div className="h-full w-full">
-      <MapContainer
-        center={center}
-        zoom={15}
-        className="h-full w-full"
-        whenCreated={(instance) => setMapInstance(instance)}
-      >
+      <MapContainer center={center} zoom={15} className="h-full w-full">
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -239,7 +252,9 @@ const MapView = ({ rooms, selectedRoomId, onRoomFocus }: MapViewProps) => {
           const status = getRoomStatus(room, todayCode);
           const statusLabel =
             status === "available"
-              ? "Available now"
+              ? room.nextAvailable
+                ? `Open until ${room.nextAvailable.startTime}`
+                : "Open now"
               : status === "later"
               ? "Available later today"
               : "Unavailable today";
@@ -255,18 +270,28 @@ const MapView = ({ rooms, selectedRoomId, onRoomFocus }: MapViewProps) => {
               key={group.buildingId}
               position={[group.lat, group.lng]}
               icon={statusIcons[status]}
+              riseOnHover={true}
+              riseOffset={250}
               ref={(instance) => {
                 markerRefs.current[group.buildingId] = instance;
               }}
               eventHandlers={{
                 popupopen: () => {
                   const focusedRoom =
-                    group.rooms[
-                      activeRoomIndex[group.buildingId] ?? 0
-                    ] ?? null;
+                    group.rooms[activeRoomIndex[group.buildingId] ?? 0] ?? null;
                   if (focusedRoom) {
                     onRoomFocus?.(focusedRoom.id);
                   }
+                },
+                mouseover: (event) => {
+                  const marker = event.target;
+                  marker.setIcon(statusIconsHovered[status]);
+                  marker.setZIndexOffset(1000);
+                },
+                mouseout: (event) => {
+                  const marker = event.target;
+                  marker.setIcon(statusIcons[status]);
+                  marker.setZIndexOffset(0);
                 },
               }}
             >
@@ -283,10 +308,7 @@ const MapView = ({ rooms, selectedRoomId, onRoomFocus }: MapViewProps) => {
                     {group.buildingName} • {room.roomNumber}
                   </strong>
                   <div className="mt-1 text-sm">
-                    Status:{" "}
-                    <span className={statusTone}>
-                      {statusLabel}
-                    </span>
+                    Status: <span className={statusTone}>{statusLabel}</span>
                     {room.nextAvailable ? (
                       <>
                         <br />
